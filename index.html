@@ -21,11 +21,18 @@ h1 span{color:var(--accent)}
 .metric-label{font-size:10px;color:var(--muted);margin-bottom:6px;font-family:var(--mono);letter-spacing:0.05em;text-transform:uppercase}
 .metric-value{font-size:18px;font-weight:500;font-family:var(--mono)}
 .metric-value.pos{color:var(--green)}.metric-value.neg{color:var(--red)}.metric-value.neutral{color:var(--text)}.metric-value.small{font-size:13px}
+.matrix-controls{display:flex;align-items:center;gap:10px;margin-bottom:.75rem;flex-wrap:wrap}
+.ctrl-label{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.ctrl-input{font-size:13px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--mono);width:110px;transition:border-color .15s}
+.ctrl-input:focus{outline:none;border-color:var(--accent)}
+.ctrl-input::placeholder{color:var(--muted)}
+.ctrl-select{font-size:13px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--surface2);color:var(--text);font-family:var(--mono);cursor:pointer}
+.ctrl-hint{font-family:var(--mono);font-size:10px;color:var(--muted)}
 .matrix-section{margin-bottom:1.25rem}
 .matrix-chunk{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:.75rem}
 .matrix-table{border-collapse:collapse;font-family:var(--mono);white-space:nowrap}
 .matrix-table td{padding:6px 4px;text-align:right;min-width:72px}
-.price-row td{background:rgba(247,201,72,0.15);color:var(--amber);font-size:13px;border-bottom:0.5px solid rgba(247,201,72,0.2)}
+.price-row td{background:rgba(62,207,142,0.22);color:#fff;font-size:13px;font-weight:500;border-bottom:0.5px solid rgba(62,207,142,0.3)}
 .pl-row td{font-size:14px;font-weight:500}
 .cell-pos{color:var(--green)}.cell-neg{color:var(--red)}.cell-zero{color:var(--muted)}
 .chart-section{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:1rem 1.25rem;margin-bottom:1.25rem}
@@ -51,7 +58,7 @@ h1 span{color:var(--accent)}
 .leg-row input:focus{outline:none;border-color:var(--accent)}
 .leg-row input::placeholder{color:var(--muted);font-size:11px}
 @media(max-width:1024px){.groups-grid{grid-template-columns:1fr}}
-@media(max-width:640px){.summary-bar{grid-template-columns:repeat(2,1fr)}body{padding:1rem}.view-toggle{width:100%}.view-btn{flex:1;text-align:center}.leg-row input{font-size:13px}}
+@media(max-width:640px){.summary-bar{grid-template-columns:repeat(2,1fr)}body{padding:1rem}.view-toggle{width:100%}.view-btn{flex:1;text-align:center}.leg-row input{font-size:13px}.ctrl-input{width:90px}}
 </style>
 </head>
 <body>
@@ -67,6 +74,19 @@ h1 span{color:var(--accent)}
   <div class="metric"><div class="metric-label">BREAKEVEN</div><div class="metric-value neutral small" id="m-be">-</div></div>
 </div>
 <div id="matrixView">
+  <div class="matrix-controls">
+    <span class="ctrl-label">中心値</span>
+    <input type="number" class="ctrl-input" id="matrixCenter" step="50" placeholder="55000">
+    <span class="ctrl-label">幅</span>
+    <select class="ctrl-select" id="matrixRange">
+      <option value="1000">± 1,000</option>
+      <option value="2000">± 2,000</option>
+      <option value="3000" selected>± 3,000</option>
+      <option value="4000">± 4,000</option>
+      <option value="5000">± 5,000</option>
+    </select>
+    <span class="ctrl-hint" id="rangeHint"></span>
+  </div>
   <div class="matrix-section" id="matrixContainer"></div>
 </div>
 <div id="chartView" style="display:none">
@@ -81,17 +101,20 @@ function plAtExpiry(S,g){if(!g.enabled)return 0;const ot=g.type==='コール'?'C
 function totalPL(S){return state.reduce((acc,g)=>acc+plAtExpiry(S,g),0)}
 function getRange(){let allK=[];state.forEach(g=>{if(!g.enabled)return;[...g.sell,...g.buy].forEach(r=>{if(+r.k)allK.push(+r.k)})});if(!allK.length)return{min:53000,max:60000,step:50};const mn=Math.min(...allK),mx=Math.max(...allK),pad=(mx-mn)||3000;return{min:Math.round((mn-pad*0.7)/50)*50,max:Math.round((mx+pad*0.7)/50)*50,step:50}}
 function buildData(){const{min,max,step}=getRange();const pts=[];for(let s=min;s<=max;s+=step)pts.push(s);return{pts,vals:pts.map(totalPL)}}
+function getMatrixPts(){const center=+document.getElementById('matrixCenter').value,range=+document.getElementById('matrixRange').value;let min,max;if(center>0){min=Math.round((center-range)/50)*50;max=Math.round((center+range)/50)*50}else{const r=getRange();min=r.min;max=r.max}document.getElementById('rangeHint').textContent=center>0?`${min.toLocaleString()} 〜 ${max.toLocaleString()}`:'';const pts=[];for(let s=min;s<=max;s+=50)pts.push(s);return pts}
 function fmt(v){return(v>=0?'+':'')+Math.round(v).toLocaleString()+'円'}
 function updateSummary(pts,vals){const maxP=Math.max(...vals,0),maxL=Math.min(...vals,0);let net=0;state.forEach(g=>{if(!g.enabled)return;g.sell.forEach(r=>{if(+r.k&&+r.p&&+r.q)net-=+r.p*+r.q*MULT});g.buy.forEach(r=>{if(+r.k&&+r.p&&+r.q)net+=+r.p*+r.q*MULT})});document.getElementById('m-net').textContent=fmt(net);document.getElementById('m-net').className='metric-value '+(net>=0?'pos':'neg');document.getElementById('m-maxp').textContent='+'+Math.round(maxP).toLocaleString()+'円';document.getElementById('m-maxl').textContent=Math.round(maxL).toLocaleString()+'円';const bes=[];for(let i=0;i<vals.length-1;i++){if((vals[i]<0&&vals[i+1]>=0)||(vals[i]>=0&&vals[i+1]<0))bes.push(Math.round((pts[i]+pts[i+1])/2))}document.getElementById('m-be').textContent=bes.length>=2?bes[0].toLocaleString()+' / '+bes[bes.length-1].toLocaleString():bes.length===1?bes[0].toLocaleString():'-'}
 let chart=null;
 function renderChart(){const{pts,vals}=buildData();updateSummary(pts,vals);const colors=vals.map(v=>v>=0?'rgba(62,207,142,0.75)':'rgba(247,110,110,0.75)'),yAbs=Math.max(...vals.map(Math.abs),1)*1.25;if(chart){chart.data.labels=pts;chart.data.datasets[0].data=vals;chart.data.datasets[0].backgroundColor=colors;chart.options.scales.y.min=-yAbs;chart.options.scales.y.max=yAbs;chart.update('none')}else{chart=new Chart(document.getElementById('mainChart'),{type:'bar',data:{labels:pts,datasets:[{data:vals,backgroundColor:colors,borderWidth:0,barPercentage:1,categoryPercentage:1}]},options:{responsive:true,maintainAspectRatio:false,animation:{duration:120},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>fmt(c.parsed.y)},backgroundColor:'#1e2333',borderColor:'rgba(255,255,255,0.1)',borderWidth:1,titleColor:'#7b8099',bodyColor:'#e8eaf0',padding:8}},scales:{x:{ticks:{maxTicksLimit:8,color:'#7b8099',font:{family:"'IBM Plex Mono'",size:10},callback:(_,i)=>pts[i]!=null?pts[i].toLocaleString():''},grid:{display:false},border:{color:'rgba(255,255,255,0.08)'}},y:{min:-yAbs,max:yAbs,ticks:{color:'#7b8099',font:{family:"'IBM Plex Mono'",size:10},callback:v=>(v>=0?'+':'')+Math.round(v/1000)+'K'},grid:{color:'rgba(255,255,255,0.05)'},border:{color:'rgba(255,255,255,0.08)'}}}}})}}
-function buildMatrix(){const{pts,vals}=buildData();updateSummary(pts,vals);const CHUNK=window.innerWidth<=640?8:window.innerWidth<=1024?12:15,container=document.getElementById('matrixContainer');let html='';for(let ci=0;ci<pts.length;ci+=CHUNK){const chunk=pts.slice(ci,ci+CHUNK);html+='<div class="matrix-chunk"><table class="matrix-table"><tr class="price-row">';chunk.forEach(p=>{html+=`<td>${p.toLocaleString()}</td>`});html+='</tr><tr class="pl-row">';chunk.forEach(p=>{const v=Math.round(totalPL(p));const cls=v>0?'cell-pos':v<0?'cell-neg':'cell-zero';const d=v===0?'0':(v>0?'+':'')+v.toLocaleString();html+=`<td class="${cls}">${d}</td>`});html+='</tr></table></div>'}container.innerHTML=html}
+function buildMatrix(){const{pts:sumPts,vals}=buildData();updateSummary(sumPts,vals);const pts=getMatrixPts();const w=window.innerWidth;const CHUNK=w>=1440?20:w>=1025?15:w>=641?12:8;const container=document.getElementById('matrixContainer');let html='';for(let ci=0;ci<pts.length;ci+=CHUNK){const chunk=pts.slice(ci,ci+CHUNK);html+='<div class="matrix-chunk"><table class="matrix-table"><tr class="price-row">';chunk.forEach(p=>{html+=`<td>${p.toLocaleString()}</td>`});html+='</tr><tr class="pl-row">';chunk.forEach(p=>{const v=Math.round(totalPL(p));const cls=v>0?'cell-pos':v<0?'cell-neg':'cell-zero';const d=v===0?'0':(v>0?'+':'')+v.toLocaleString();html+=`<td class="${cls}">${d}</td>`});html+='</tr></table></div>'}container.innerHTML=html}
 function groupMaxLoss(g){const{pts}=buildData();return Math.min(...pts.map(s=>plAtExpiry(s,g)),0)}
 let currentView='matrix';
 function render(){if(currentView==='chart')renderChart();else buildMatrix();state.forEach((_,i)=>{const e=document.getElementById('ml-'+i);if(e)e.textContent=Math.round(groupMaxLoss(state[i])).toLocaleString()+'円'})}
 function switchView(view){currentView=view;document.getElementById('matrixView').style.display=view==='matrix'?'':'none';document.getElementById('chartView').style.display=view==='chart'?'':'none';document.getElementById('btn-matrix').classList.toggle('active',view==='matrix');document.getElementById('btn-chart').classList.toggle('active',view==='chart');render()}
 document.getElementById('btn-matrix').onclick=()=>switchView('matrix');
 document.getElementById('btn-chart').onclick=()=>switchView('chart');
+document.getElementById('matrixCenter').addEventListener('input',()=>{if(currentView==='matrix')buildMatrix()});
+document.getElementById('matrixRange').addEventListener('change',()=>{if(currentView==='matrix')buildMatrix()});
 function buildGroups(){const container=document.getElementById('groupsContainer');container.innerHTML='';state.forEach((g,gi)=>{const typeClass=g.type==='コール'?'call':'put',card=document.createElement('div');card.className='group-card '+(g.enabled?'active':'inactive');card.id='card-'+gi;card.innerHTML=`<div class="group-header"><span class="group-num">#${gi+1}</span><select class="type-sel ${typeClass}" data-gi="${gi}"><option${g.type==='コール'?' selected':''}>コール</option><option${g.type==='プット'?' selected':''}>プット</option></select><span class="maxloss-badge" id="ml-${gi}">${Math.round(groupMaxLoss(g)).toLocaleString()}円</span><label class="enable-toggle"><input type="checkbox" data-gi="${gi}" data-role="enable" ${g.enabled?'checked':''}>有効</label></div><div class="leg-block sell"><div class="leg-title sell">SELL</div><div class="leg-head"><span>行使価格</span><span>プレミアム</span><span>枚数</span></div>${g.sell.map((r,ri)=>`<div class="leg-row"><input type="number" step="50" placeholder="57000" value="${r.k}" data-gi="${gi}" data-role="sell-k" data-ri="${ri}"><input type="number" step="1" placeholder="200" value="${r.p}" data-gi="${gi}" data-role="sell-p" data-ri="${ri}"><input type="number" step="1" min="1" value="${r.q}" data-gi="${gi}" data-role="sell-q" data-ri="${ri}"></div>`).join('')}</div><div class="leg-block buy"><div class="leg-title buy">BUY</div><div class="leg-head"><span>行使価格</span><span>プレミアム</span><span>枚数</span></div>${g.buy.map((r,ri)=>`<div class="leg-row"><input type="number" step="50" placeholder="58000" value="${r.k}" data-gi="${gi}" data-role="buy-k" data-ri="${ri}"><input type="number" step="1" placeholder="100" value="${r.p}" data-gi="${gi}" data-role="buy-p" data-ri="${ri}"><input type="number" step="1" min="1" value="${r.q}" data-gi="${gi}" data-role="buy-q" data-ri="${ri}"></div>`).join('')}</div>`;container.appendChild(card)});container.addEventListener('input',e=>{const el=e.target,gi=+el.dataset.gi;if(isNaN(gi))return;const role=el.dataset.role,ri=+el.dataset.ri;if(role==='enable'){state[gi].enabled=el.checked;document.getElementById('card-'+gi).className='group-card '+(el.checked?'active':'inactive')}else if(el.tagName==='SELECT'){state[gi].type=el.value;el.className='type-sel '+(el.value==='コール'?'call':'put')}else if(role==='sell-k')state[gi].sell[ri].k=el.value;else if(role==='sell-p')state[gi].sell[ri].p=el.value;else if(role==='sell-q')state[gi].sell[ri].q=el.value;else if(role==='buy-k')state[gi].buy[ri].k=el.value;else if(role==='buy-p')state[gi].buy[ri].p=el.value;else if(role==='buy-q')state[gi].buy[ri].q=el.value;render()})}
 buildGroups();render();
 </script>
